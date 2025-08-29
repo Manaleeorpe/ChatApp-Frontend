@@ -38,8 +38,9 @@ export default function Chatscreen() {
     if (!userId || !friendId) return;
 
     try {
-      console.log("[FetchMessages] GET", `${BASE_URL}/messages/${userId}/${friendId}`);
-      const res = await fetch(`${BASE_URL}/messages/${userId}/${friendId}`, {
+      const url = `${BASE_URL}/messages/${userId}/${friendId}`;
+      console.log("[FetchMessages] GET", url);
+      const res = await fetch(url, {
         credentials: "include",
         mode: "cors",
       });
@@ -106,9 +107,10 @@ export default function Chatscreen() {
       ws.current.close();
     }
 
+    // Build and log the exact WS URL
     const wsHost = BASE_URL.replace(/^https?:\/\//, "");
     const wsUrl = `wss://${wsHost}/ws/${userId}/${friendId}`;
-    console.log("[WS] Opening WebSocket:", wsUrl, {
+    console.log("[WS] Opening WebSocket URL:", wsUrl, {
       userId,
       friendId,
       isFriendOnline,
@@ -133,7 +135,7 @@ export default function Chatscreen() {
           return;
         }
       } catch {
-        // Not JSON, treat as plain string
+        // not JSON
       }
       setMessages((prev) => [
         ...prev,
