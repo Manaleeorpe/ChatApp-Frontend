@@ -8,9 +8,11 @@ import {
 } from 'mdb-react-ui-kit';
 import 'mdb-react-ui-kit/dist/css/mdb.min.css';
 
+const BASE_URL = process.env.REACT_APP_BASE_URL;
+
 function Login() {
   const handleGoogleLogin = () => {
-    window.location.href = "http://localhost:8080/auth/google/login";
+    window.location.href = `${BASE_URL}/auth/google/login`;
   };
 
   return (

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import "./index.css"; // CSS file for styling
 
+const BASE_URL = process.env.REACT_APP_BASE_URL;
+
 export default function Chatscreen() {
   const [currentUser, setCurrentUser] = useState({ name: "", email_id: "", ID: null });
   const [userFriends, setUserFriends] = useState([]);
@@ -9,7 +11,6 @@ export default function Chatscreen() {
   const [loadingUser, setLoadingUser] = useState(true);
   const [error, setError] = useState(null);
   const [isFriendOnline, setIsFriendOnline] = useState(false);
-
 
   const [search, setSearch] = useState("");
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -24,12 +25,11 @@ export default function Chatscreen() {
   const userId = currentUser.ID;
   const friendId = selectedFriend?.ID;
 
-  // ✅ Moved above useEffect for proper ordering
   const fetchMessages = useCallback(async () => {
     if (!userId || !friendId) return;
 
     try {
-      const res = await fetch(`http://localhost:8080/messages/${userId}/${friendId}`, {
+      const res = await fetch(`${BASE_URL}/messages/${userId}/${friendId}`, {
         credentials: "include",
         mode: "cors",
       });
@@ -65,38 +65,40 @@ export default function Chatscreen() {
 
   useEffect(() => {
     if (!friendId) return;
-  
+
     const checkOnlineStatus = async () => {
       try {
-        const res = await fetch(`http://localhost:8080/ws/isOnline/${friendId}`);
-        //const { online } = await res.json(); // make sure server returns { "online": true }
-        setIsFriendOnline(res);
+        const res = await fetch(`${BASE_URL}/ws/isOnline/${friendId}`);
+        // Assuming server returns JSON { online: true/false }
+        if (res.ok) {
+          const { online } = await res.json();
+          setIsFriendOnline(online);
+        } else {
+          setIsFriendOnline(false);
+        }
       } catch (e) {
         console.error("Error checking online status:", e);
         setIsFriendOnline(false);
       }
     };
-  
+
     checkOnlineStatus();
   }, [friendId]);
-  
 
-  // ✅ WebSocket setup with fetchMessages in deps
   useEffect(() => {
     if (!userId || !friendId || !isFriendOnline) return;
-  
+
     if (ws.current) {
       ws.current.close();
     }
-  
 
-    const socket = new WebSocket(`ws://localhost:8080/ws/${userId}/${friendId}`);
+    const socket = new WebSocket(`ws://${BASE_URL.replace(/^https?:\/\//, "")}/ws/${userId}/${friendId}`);
     ws.current = socket;
-  
+
     socket.onopen = () => {
       console.log(`🔌 WebSocket connected to ${friendId}`);
     };
-  
+
     socket.onmessage = (event) => {
       console.log("📥 Raw WebSocket message:", event.data);
       try {
@@ -110,25 +112,24 @@ export default function Chatscreen() {
         setMessages(prev => [...prev, { text: event.data, from: selectedFriend?.name || "Unknown" }]);
       }
     };
-    
-  
+
     socket.onerror = (err) => {
       console.error("WebSocket error:", err);
     };
-  
+
     socket.onclose = () => {
       console.log("🔌 WebSocket closed");
     };
-  
+
     return () => {
       socket.close();
     };
   }, [userId, friendId, isFriendOnline, selectedFriend]);
-  
+
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await fetch("http://localhost:8080/users/me", {
+        const res = await fetch(`${BASE_URL}/users/me`, {
           credentials: "include",
           mode: "cors",
         });
@@ -148,7 +149,7 @@ export default function Chatscreen() {
   const fetchFriends = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`http://localhost:8080/friends/friendRequestStatus/${userId}/Accepted`, {
+      const res = await fetch(`${BASE_URL}/friends/friendRequestStatus/${userId}/Accepted`, {
         credentials: "include",
         mode: "cors",
       });
@@ -176,7 +177,7 @@ export default function Chatscreen() {
     if (!userId) return;
     async function fetchPendingRequests() {
       try {
-        const res = await fetch(`http://localhost:8080/friends/friendRequestUserCanAccept/${userId}`, {
+        const res = await fetch(`${BASE_URL}/friends/friendRequestUserCanAccept/${userId}`, {
           credentials: "include",
           mode: "cors",
         });
@@ -194,14 +195,14 @@ export default function Chatscreen() {
   }, [userId]);
 
   useEffect(() => {
-    fetchMessages(); // ✅ useEffect that fetches messages once
+    fetchMessages();
   }, [fetchMessages]);
 
   useEffect(() => {
     if (!showAddFriendModal || !userId) return;
     async function fetchNonFriends() {
       try {
-        const res = await fetch(`http://localhost:8080/users/suggestedfriends/${userId}`, {
+        const res = await fetch(`${BASE_URL}/users/suggestedfriends/${userId}`, {
           credentials: "include",
           mode: "cors",
         });
@@ -226,7 +227,6 @@ export default function Chatscreen() {
     setMessageText("");
 
     try {
-      //console.log("📤 Sending WebSocket message:", text);
       ws.current.send(text);
     } catch (e) {
       console.error("❌ Error sending WebSocket message:", e);
@@ -244,7 +244,7 @@ export default function Chatscreen() {
     let friendRequestID;
 
     try {
-      const res = await fetch(`http://localhost:8080/users/email/${email}`, {
+      const res = await fetch(`${BASE_URL}/users/email/${email}`, {
         credentials: "include",
         mode: "cors",
       });
@@ -268,7 +268,7 @@ export default function Chatscreen() {
     }
 
     try {
-      const res = await fetch("http://localhost:8080/friends", {
+      const res = await fetch(`${BASE_URL}/friends`, {
         method: "POST",
         credentials: "include",
         mode: "cors",
@@ -302,7 +302,7 @@ export default function Chatscreen() {
 
   const acceptRequest = async (request) => {
     try {
-      const res = await fetch(`http://localhost:8080/friends/${userId}/${request.ID}/Accepted`, {
+      const res = await fetch(`${BASE_URL}/friends/${userId}/${request.ID}/Accepted`, {
         method: "PUT",
         credentials: "include",
         mode: "cors",

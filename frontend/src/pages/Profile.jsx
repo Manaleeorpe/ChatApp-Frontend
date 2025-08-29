@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
+const BASE_URL = process.env.REACT_APP_BASE_URL;
+
 function Profile() {
   const [currentUser, setCurrentUser] = useState({ name: '', email_id: '', ID: null });
   const [loadingUser, setLoadingUser] = useState(true);
@@ -8,7 +10,7 @@ function Profile() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await fetch("http://localhost:8080/users/me", {
+        const res = await fetch(`${BASE_URL}/users/me`, {
           credentials: "include",
           mode: "cors",
         });

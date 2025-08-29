@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
+const BASE_URL = process.env.REACT_APP_BASE_URL;
+
 function Dashboard() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,7 @@ function Dashboard() {
     try {
       console.log('Fetching user data...');
       
-      const response = await fetch("http://localhost:8080/users/me", {
+      const response = await fetch(`${BASE_URL}/users/me`, {
         method: 'GET',
         credentials: 'include', // Include cookies
         mode: 'cors', // Explicitly set CORS mode
@@ -46,15 +48,15 @@ function Dashboard() {
   return (
     <div>
       <h1>Dashboard</h1>
+      {loading && <p>Loading user data...</p>}
+      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
       {user ? (
         <div>
           <p>Welcome, {user.Name || user.name}</p>
           <p>Email: {user.email_id || user.email}</p>
         </div>
       ) : (
-        <div>
-          <p>No user data available</p>
-        </div>
+        !loading && <p>No user data available</p>
       )}
     </div>
   );
