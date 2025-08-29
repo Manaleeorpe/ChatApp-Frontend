@@ -4,7 +4,11 @@ import "./index.css"; // CSS file for styling
 const BASE_URL = process.env.REACT_APP_BASE_URL;
 
 export default function Chatscreen() {
-  const [currentUser, setCurrentUser] = useState({ name: "", email_id: "", ID: null });
+  const [currentUser, setCurrentUser] = useState({
+    name: "",
+    email_id: "",
+    ID: null,
+  });
   const [userFriends, setUserFriends] = useState([]);
   const [nonFriendUsers, setNonFriendUsers] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -25,10 +29,16 @@ export default function Chatscreen() {
   const userId = currentUser.ID;
   const friendId = selectedFriend?.ID;
 
+  // Log whenever userId or friendId changes
+  useEffect(() => {
+    console.log("[Chatscreen] userId:", userId, "friendId:", friendId);
+  }, [userId, friendId]);
+
   const fetchMessages = useCallback(async () => {
     if (!userId || !friendId) return;
 
     try {
+      console.log("[FetchMessages] GET", `${BASE_URL}/messages/${userId}/${friendId}`);
       const res = await fetch(`${BASE_URL}/messages/${userId}/${friendId}`, {
         credentials: "include",
         mode: "cors",
@@ -40,8 +50,8 @@ export default function Chatscreen() {
       }
 
       if (!res.ok) {
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
           const errorData = await res.json();
           alert(errorData.message || `Error: HTTP ${res.status}`);
         } else {
@@ -55,7 +65,7 @@ export default function Chatscreen() {
       if (!Array.isArray(data) || data.length === 0) {
         setMessages([]);
       } else {
-        setMessages(data.map(m => ({ text: m.Content, from: m.SenderName })));
+        setMessages(data.map((m) => ({ text: m.Content, from: m.SenderName })));
       }
     } catch (e) {
       console.error("❌ Error fetching messages:", e);
@@ -68,11 +78,12 @@ export default function Chatscreen() {
 
     const checkOnlineStatus = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/ws/isOnline/${friendId}`);
-        // Assuming server returns JSON { online: true/false }
+        const url = `${BASE_URL}/ws/isOnline/${friendId}`;
+        console.log("[OnlineStatus] GET", url);
+        const res = await fetch(url, { credentials: "include", mode: "cors" });
         if (res.ok) {
           const { online } = await res.json();
-          setIsFriendOnline(online);
+          setIsFriendOnline(Boolean(online));
         } else {
           setIsFriendOnline(false);
         }
@@ -89,39 +100,63 @@ export default function Chatscreen() {
     if (!userId || !friendId || !isFriendOnline) return;
 
     if (ws.current) {
+      console.log("[WS] Cleanup previous socket before opening new", {
+        prevReadyState: ws.current.readyState,
+      });
       ws.current.close();
     }
 
-    const socket = new WebSocket(`wss://${BASE_URL.replace(/^https?:\/\//, "")}/ws/${userId}/${friendId}`);
+    const wsHost = BASE_URL.replace(/^https?:\/\//, "");
+    const wsUrl = `wss://${wsHost}/ws/${userId}/${friendId}`;
+    console.log("[WS] Opening WebSocket:", wsUrl, {
+      userId,
+      friendId,
+      isFriendOnline,
+    });
+
+    const socket = new WebSocket(wsUrl);
     ws.current = socket;
 
     socket.onopen = () => {
-      console.log(`🔌 WebSocket connected to ${friendId}`);
+      console.log(`[WS] Connected. userId=${userId}, friendId=${friendId}`);
     };
 
     socket.onmessage = (event) => {
-      console.log("📥 Raw WebSocket message:", event.data);
+      console.log("[WS] Message:", event.data, { userId, friendId });
       try {
         const message = JSON.parse(event.data);
         if (message.Content && message.SenderName) {
-          setMessages(prev => [...prev, { text: message.Content, from: message.SenderName }]);
+          setMessages((prev) => [
+            ...prev,
+            { text: message.Content, from: message.SenderName },
+          ]);
           return;
         }
       } catch {
         // Not JSON, treat as plain string
-        setMessages(prev => [...prev, { text: event.data, from: selectedFriend?.name || "Unknown" }]);
       }
+      setMessages((prev) => [
+        ...prev,
+        { text: event.data, from: selectedFriend?.name || "Unknown" },
+      ]);
     };
 
     socket.onerror = (err) => {
-      console.error("WebSocket error:", err);
+      console.error("[WS] Error:", err, { userId, friendId });
     };
 
-    socket.onclose = () => {
-      console.log("🔌 WebSocket closed");
+    socket.onclose = (ev) => {
+      console.log("[WS] Closed:", {
+        code: ev.code,
+        reason: ev.reason,
+        wasClean: ev.wasClean,
+        userId,
+        friendId,
+      });
     };
 
     return () => {
+      console.log("[WS] Cleanup (closing socket)", { userId, friendId });
       socket.close();
     };
   }, [userId, friendId, isFriendOnline, selectedFriend]);
@@ -129,7 +164,9 @@ export default function Chatscreen() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await fetch(`${BASE_URL}/users/me`, {
+        const url = `${BASE_URL}/users/me`;
+        console.log("[FetchUser] GET", url);
+        const res = await fetch(url, {
           credentials: "include",
           mode: "cors",
         });
@@ -149,7 +186,9 @@ export default function Chatscreen() {
   const fetchFriends = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`${BASE_URL}/friends/friendRequestStatus/${userId}/Accepted`, {
+      const url = `${BASE_URL}/friends/friendRequestStatus/${userId}/Accepted`;
+      console.log("[FetchFriends] GET", url);
+      const res = await fetch(url, {
         credentials: "include",
         mode: "cors",
       });
@@ -162,7 +201,7 @@ export default function Chatscreen() {
         throw new Error(`HTTP ${res.status}: ${errorText}`);
       }
       const data = await res.json();
-      setUserFriends(data);
+      setUserFriends(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("❌ Error fetching friends:", e.message);
       setError(e.message);
@@ -177,7 +216,9 @@ export default function Chatscreen() {
     if (!userId) return;
     async function fetchPendingRequests() {
       try {
-        const res = await fetch(`${BASE_URL}/friends/friendRequestUserCanAccept/${userId}`, {
+        const url = `${BASE_URL}/friends/friendRequestUserCanAccept/${userId}`;
+        console.log("[PendingRequests] GET", url);
+        const res = await fetch(url, {
           credentials: "include",
           mode: "cors",
         });
@@ -202,7 +243,9 @@ export default function Chatscreen() {
     if (!showAddFriendModal || !userId) return;
     async function fetchNonFriends() {
       try {
-        const res = await fetch(`${BASE_URL}/users/suggestedfriends/${userId}`, {
+        const url = `${BASE_URL}/users/suggestedfriends/${userId}`;
+        console.log("[NonFriends] GET", url);
+        const res = await fetch(url, {
           credentials: "include",
           mode: "cors",
         });
@@ -215,21 +258,37 @@ export default function Chatscreen() {
     fetchNonFriends();
   }, [showAddFriendModal, userId]);
 
-  const filteredFriends = userFriends.filter(f =>
-    f.name.toLowerCase().includes(search.toLowerCase())
+  const filteredFriends = userFriends.filter((f) =>
+    (f.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const sendMessage = () => {
     const text = messageText.trim();
-    if (!text || !selectedFriend || !userId || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+    console.log("[Send]", {
+      text,
+      userId,
+      friendId,
+      wsReady: ws.current?.readyState,
+    });
+    if (
+      !text ||
+      !selectedFriend ||
+      !userId ||
+      !ws.current ||
+      ws.current.readyState !== WebSocket.OPEN
+    )
+      return;
 
-    setMessages(prev => [...prev, { from: currentUser.name, text }]);
+    setMessages((prev) => [...prev, { from: currentUser.name, text }]);
     setMessageText("");
 
     try {
       ws.current.send(text);
     } catch (e) {
-      console.error("❌ Error sending WebSocket message:", e);
+      console.error("❌ Error sending WebSocket message:", e, {
+        userId,
+        friendId,
+      });
       setError("Failed to send message over WebSocket");
     }
   };
@@ -244,13 +303,15 @@ export default function Chatscreen() {
     let friendRequestID;
 
     try {
-      const res = await fetch(`${BASE_URL}/users/email/${email}`, {
+      const url = `${BASE_URL}/users/email/${email}`;
+      console.log("[LookupByEmail] GET", url);
+      const res = await fetch(url, {
         credentials: "include",
         mode: "cors",
       });
       if (!res.ok) {
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
           const errorData = await res.json();
           alert(errorData.message || `Error: HTTP ${res.status}`);
         } else {
@@ -268,19 +329,27 @@ export default function Chatscreen() {
     }
 
     try {
-      const res = await fetch(`${BASE_URL}/friends`, {
+      const url = `${BASE_URL}/friends`;
+      console.log("[SendFriendRequest] POST", url, {
+        Friend1UserID: userId,
+        Friend2UserID: friendRequestID,
+      });
+      const res = await fetch(url, {
         method: "POST",
         credentials: "include",
         mode: "cors",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ Friend1UserID: userId, Friend2UserID: friendRequestID }),
+        body: JSON.stringify({
+          Friend1UserID: userId,
+          Friend2UserID: friendRequestID,
+        }),
       });
 
       if (!res.ok) {
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
           const errorData = await res.json();
           alert(errorData.message || `Error: HTTP ${res.status}`);
         } else {
@@ -302,7 +371,9 @@ export default function Chatscreen() {
 
   const acceptRequest = async (request) => {
     try {
-      const res = await fetch(`${BASE_URL}/friends/${userId}/${request.ID}/Accepted`, {
+      const url = `${BASE_URL}/friends/${userId}/${request.ID}/Accepted`;
+      console.log("[AcceptRequest] PUT", url);
+      const res = await fetch(url, {
         method: "PUT",
         credentials: "include",
         mode: "cors",
@@ -313,7 +384,7 @@ export default function Chatscreen() {
         return;
       }
       alert(`Friend request accepted!`);
-      setPendingRequests(prev => prev.filter(r => r.ID !== request.ID));
+      setPendingRequests((prev) => prev.filter((r) => r.ID !== request.ID));
       fetchFriends();
     } catch (e) {
       console.error("❌ Error accepting friend request:", e);
@@ -327,10 +398,16 @@ export default function Chatscreen() {
   return (
     <div className="chat-container">
       {showAddFriendModal && (
-        <div className="modal-overlay" onClick={() => setShowAddFriendModal(false)}>
+        <div
+          className="modal-overlay"
+          onClick={() => setShowAddFriendModal(false)}
+        >
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Add a Friend</h3>
-            <select value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)}>
+            <select
+              value={friendEmail}
+              onChange={(e) => setFriendEmail(e.target.value)}
+            >
               <option value="">Select a user</option>
               {Array.isArray(nonFriendUsers) &&
                 nonFriendUsers.map((user) => (
@@ -341,7 +418,9 @@ export default function Chatscreen() {
             </select>
             <div className="modal-buttons">
               <button onClick={sendFriendRequest}>Send Request</button>
-              <button onClick={() => setShowAddFriendModal(false)}>Cancel</button>
+              <button onClick={() => setShowAddFriendModal(false)}>
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -362,7 +441,10 @@ export default function Chatscreen() {
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <button className="add-friend-button" onClick={() => setShowAddFriendModal(true)}>
+        <button
+          className="add-friend-button"
+          onClick={() => setShowAddFriendModal(true)}
+        >
           Add Friend
         </button>
 
@@ -387,6 +469,7 @@ export default function Chatscreen() {
                 key={f.ID}
                 className={`user-card ${friendId === f.ID ? "selected" : ""}`}
                 onClick={() => {
+                  console.log("[UI] Selected friend:", f);
                   setSelectedFriend(f);
                   setMessages([]);
                 }}
@@ -400,7 +483,9 @@ export default function Chatscreen() {
 
       <div className="right-panel">
         <div className="chat-header">
-          {selectedFriend ? `Chat with ${selectedFriend.email_id}` : "Select a friend to start chatting"}
+          {selectedFriend
+            ? `Chat with ${selectedFriend.email_id}`
+            : "Select a friend to start chatting"}
         </div>
 
         <div className="message-container">
@@ -408,7 +493,12 @@ export default function Chatscreen() {
             <div className="no-messages">No messages</div>
           ) : (
             messages.map((msg, i) => (
-              <div key={i} className={`message ${msg.from === currentUser.name ? "me" : "other"}`}>
+              <div
+                key={i}
+                className={`message ${
+                  msg.from === currentUser.name ? "me" : "other"
+                }`}
+              >
                 {msg.from}: {msg.text}
               </div>
             ))
@@ -425,7 +515,11 @@ export default function Chatscreen() {
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             disabled={!selectedFriend}
           />
-          <button className="send-button" onClick={sendMessage} disabled={!selectedFriend}>
+          <button
+            className="send-button"
+            onClick={sendMessage}
+            disabled={!selectedFriend}
+          >
             Send
           </button>
         </div>
