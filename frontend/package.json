@@ -30,7 +30,7 @@
   "bugs": {
     "url": "https://github.com/Manaleeorpe/ChatApp-Frontend/issues"
   },
-  "homepage": "http://localhost:3000/",
+  "homepage": "https://chatapp-frontend-production-ea8c.up.railway.app",
   "description": "",
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
