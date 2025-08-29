@@ -92,7 +92,7 @@ export default function Chatscreen() {
       ws.current.close();
     }
 
-    const socket = new WebSocket(`ws://${BASE_URL.replace(/^https?:\/\//, "")}/ws/${userId}/${friendId}`);
+    const socket = new WebSocket(`wss://${BASE_URL.replace(/^https?:\/\//, "")}/ws/${userId}/${friendId}`);
     ws.current = socket;
 
     socket.onopen = () => {
