@@ -78,21 +78,22 @@ export default function Chatscreen() {
     if (!friendId) return;
 
     const checkOnlineStatus = async () => {
-      try {
-        const url = `${BASE_URL}/ws/isOnline/${friendId}`;
-        console.log("[OnlineStatus] GET", url);
-        const res = await fetch(url, { credentials: "include", mode: "cors" });
-        if (res.ok) {
-          const { online } = await res.json();
-          setIsFriendOnline(Boolean(online));
-        } else {
-          setIsFriendOnline(false);
-        }
-      } catch (e) {
-        console.error("Error checking online status:", e);
-        setIsFriendOnline(false);
-      }
-    };
+  try {
+    const res = await fetch(`${BASE_URL}/ws/isOnline/${friendId}`, {
+      credentials: "include", // Include cookies
+      mode: "cors", // Ensure CORS mode is set
+    });
+    if (res.ok) {
+      const { online } = await res.json();
+      setIsFriendOnline(Boolean(online));
+    } else {
+      setIsFriendOnline(false);
+    }
+  } catch (e) {
+    console.error("Error checking online status:", e);
+    setIsFriendOnline(false);
+  }
+};
 
     checkOnlineStatus();
   }, [friendId]);
