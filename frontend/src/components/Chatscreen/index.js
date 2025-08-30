@@ -97,73 +97,53 @@ export default function Chatscreen() {
 
     checkOnlineStatus();
   }, [friendId]);
+useEffect(() => {
+  if (!userId || !friendId) return;
 
-  useEffect(() => {
-    if (!userId || !friendId || !isFriendOnline) return;
+  if (ws.current) {
+    ws.current.close();
+  }
 
-    if (ws.current) {
-      console.log("[WS] Cleanup previous socket before opening new", {
-        prevReadyState: ws.current.readyState,
-      });
-      ws.current.close();
-    }
+  // Dynamically construct the WebSocket URL using BASE_URL
+  const wsHost = BASE_URL.replace(/^https?:\/\//, ""); // Remove http:// or https://
+  const wsUrl = `ws://${wsHost}/ws/${userId}/${friendId}`; // Use ws:// for local development
+  console.log("[WebSocket URL]", wsUrl); // Log the WebSocket URL for debugging
 
-    // Build and log the exact WS URL
-    const wsHost = BASE_URL.replace(/^https?:\/\//, "");
-    const wsUrl = `wss://${wsHost}/ws/${userId}/${friendId}`;
-    console.log("[WS] Opening WebSocket URL:", wsUrl, {
-      userId,
-      friendId,
-      isFriendOnline,
-    });
+  const socket = new WebSocket(wsUrl);
+  ws.current = socket;
 
-    const socket = new WebSocket(wsUrl);
-    ws.current = socket;
+  socket.onopen = () => {
+    console.log(`🔌 WebSocket connected to ${friendId}`);
+  };
 
-    socket.onopen = () => {
-      console.log(`[WS] Connected. userId=${userId}, friendId=${friendId}`);
-    };
-
-    socket.onmessage = (event) => {
-      console.log("[WS] Message:", event.data, { userId, friendId });
-      try {
-        const message = JSON.parse(event.data);
-        if (message.Content && message.SenderName) {
-          setMessages((prev) => [
-            ...prev,
-            { text: message.Content, from: message.SenderName },
-          ]);
-          return;
-        }
-      } catch {
-        // not JSON
+  socket.onmessage = (event) => {
+    console.log("📥 Raw WebSocket message:", event.data);
+    try {
+      const message = JSON.parse(event.data);
+      if (message.Content && message.SenderName) {
+        setMessages((prev) => [...prev, { text: message.Content, from: message.SenderName }]);
+        return;
       }
-      setMessages((prev) => [
-        ...prev,
-        { text: event.data, from: selectedFriend?.name || "Unknown" },
-      ]);
-    };
+    } catch {
+      // Not JSON, treat as plain string
+      setMessages((prev) => [...prev, { text: event.data, from: selectedFriend?.name || "Unknown" }]);
+    }
+  };
 
-    socket.onerror = (err) => {
-      console.error("[WS] Error:", err, { userId, friendId });
-    };
+  socket.onerror = (err) => {
+    console.error("WebSocket error:", err);
+  };
 
-    socket.onclose = (ev) => {
-      console.log("[WS] Closed:", {
-        code: ev.code,
-        reason: ev.reason,
-        wasClean: ev.wasClean,
-        userId,
-        friendId,
-      });
-    };
+  socket.onclose = () => {
+    console.log("🔌 WebSocket closed");
+  };
 
-    return () => {
-      console.log("[WS] Cleanup (closing socket)", { userId, friendId });
-      socket.close();
-    };
+  return () => {
+    console.log("[WebSocket] Cleaning up connection");
+    socket.close();
+  };
   }, [userId, friendId, isFriendOnline, selectedFriend]);
-
+  
   useEffect(() => {
     async function fetchUser() {
       try {
