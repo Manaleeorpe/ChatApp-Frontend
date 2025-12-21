@@ -109,9 +109,9 @@ export default function Chatscreen() {
   }
 
   // Dynamically construct the WebSocket URL using BASE_URL
-  const wsHost = BASE_URL.replace(/^https?:\/\//, ""); // Remove http:// or https://
-  const wsUrl = `ws://${wsHost}/ws/${userId}/${friendId}`; // Use ws:// for local development
-  console.log("[WebSocket URL]", wsUrl); // Log the WebSocket URL for debugging
+  const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+  const wsHost = BASE_URL.replace(/^https?:\/\//, "");
+  const wsUrl = `${wsProtocol}${wsHost}/ws/${userId}/${friendId}`;
 
   const socket = new WebSocket(wsUrl);
   ws.current = socket;
