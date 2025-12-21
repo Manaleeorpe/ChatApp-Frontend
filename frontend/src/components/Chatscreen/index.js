@@ -10,7 +10,11 @@ export default function Chatscreen() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loadingUser, setLoadingUser] = useState(true);
   const [error, setError] = useState(null);
-  const [isFriendOnline, setIsFriendOnline] = useState(false);
+  const [friendStatus, setFriendStatus] = useState({
+    online: false,
+    last_seen: null,
+  });
+
 
   const [search, setSearch] = useState("");
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -67,65 +71,83 @@ export default function Chatscreen() {
     if (!friendId) return;
 
     const checkOnlineStatus = async () => {
-      try {
-        const res = await fetch(`${BASE_URL}/ws/isOnline/${friendId}`);
-        // Assuming server returns JSON { online: true/false }
-        if (res.ok) {
-          const { online } = await res.json();
-          setIsFriendOnline(online);
-        } else {
-          setIsFriendOnline(false);
-        }
-      } catch (e) {
-        console.error("Error checking online status:", e);
-        setIsFriendOnline(false);
-      }
+  try {
+    const res = await fetch(`${BASE_URL}/ws/isOnline/${friendId}`, {
+      credentials: "include", // Include cookies
+      mode: "cors", // Ensure CORS mode is set
+    });
+    if (res.ok) {
+      const data = await res.json(); 
+      setFriendStatus({
+      online: Boolean(data.online),
+      last_seen: data.last_seen || null,
+    });
+    } else {
+      setFriendStatus({
+      online: false,
+      last_seen:  null,
+    });
+    }
+  } catch (e) {
+    console.error("Error checking online status:", e);
+    setFriendStatus({
+      online: false,
+      last_seen:  null,
+    });
+  }
     };
+    
 
     checkOnlineStatus();
   }, [friendId]);
 
   useEffect(() => {
-    if (!userId || !friendId || !isFriendOnline) return;
+  if (!userId || !friendId) return;
 
-    if (ws.current) {
-      ws.current.close();
-    }
+  if (ws.current) {
+    ws.current.close();
+  }
 
-    const socket = new WebSocket(`ws://${BASE_URL.replace(/^https?:\/\//, "")}/ws/${userId}/${friendId}`);
-    ws.current = socket;
+  // Dynamically construct the WebSocket URL using BASE_URL
+  const wsHost = BASE_URL.replace(/^https?:\/\//, ""); // Remove http:// or https://
+  const wsUrl = `ws://${wsHost}/ws/${userId}/${friendId}`; // Use ws:// for local development
+  console.log("[WebSocket URL]", wsUrl); // Log the WebSocket URL for debugging
 
-    socket.onopen = () => {
-      console.log(`🔌 WebSocket connected to ${friendId}`);
-    };
+  const socket = new WebSocket(wsUrl);
+  ws.current = socket;
 
-    socket.onmessage = (event) => {
-      console.log("📥 Raw WebSocket message:", event.data);
-      try {
-        const message = JSON.parse(event.data);
-        if (message.Content && message.SenderName) {
-          setMessages(prev => [...prev, { text: message.Content, from: message.SenderName }]);
-          return;
-        }
-      } catch {
-        // Not JSON, treat as plain string
-        setMessages(prev => [...prev, { text: event.data, from: selectedFriend?.name || "Unknown" }]);
+  socket.onopen = () => {
+    console.log(`🔌 WebSocket connected to ${friendId}`);
+  };
+
+  socket.onmessage = (event) => {
+    console.log("📥 Raw WebSocket message:", event.data);
+    try {
+      const message = JSON.parse(event.data);
+      if (message.Content && message.SenderName) {
+        setMessages((prev) => [...prev, { text: message.Content, from: message.SenderName }]);
+        return;
       }
-    };
+    } catch {
+      // Not JSON, treat as plain string
+      setMessages((prev) => [...prev, { text: event.data, from: selectedFriend?.name || "Unknown" }]);
+    }
+  };
 
-    socket.onerror = (err) => {
-      console.error("WebSocket error:", err);
-    };
+  socket.onerror = (err) => {
+    console.error("WebSocket error:", err);
+  };
 
-    socket.onclose = () => {
-      console.log("🔌 WebSocket closed");
-    };
+  socket.onclose = () => {
+    console.log("🔌 WebSocket closed");
+  };
 
-    return () => {
-      socket.close();
-    };
-  }, [userId, friendId, isFriendOnline, selectedFriend]);
-
+  return () => {
+    console.log("[WebSocket] Cleaning up connection");
+    socket.close();
+  };
+  }, [userId, friendId, selectedFriend]);
+  
   useEffect(() => {
     async function fetchUser() {
       try {
@@ -321,6 +343,25 @@ export default function Chatscreen() {
     }
   };
 
+  function formatLastSeen(timestamp) {
+  if (!timestamp) return "";
+
+  const last = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - last;
+  const mins = Math.floor(diffMs / 60000);
+
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minutes ago`;
+
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hours ago`;
+
+  const days = Math.floor(hrs / 24);
+  return `${days} days ago`;
+}
+
+
   if (loadingUser) return <div>Loading user...</div>;
   if (error) return <div>Error: {error}</div>;
 
@@ -400,8 +441,27 @@ export default function Chatscreen() {
 
       <div className="right-panel">
         <div className="chat-header">
-          {selectedFriend ? `Chat with ${selectedFriend.email_id}` : "Select a friend to start chatting"}
-        </div>
+        {selectedFriend ? (
+          <>
+            <div>{`Chat with ${selectedFriend.email_id}`}</div>
+            <div className="status-text">
+              {friendStatus.online ? (
+                <span className="online">🟢 Online</span>
+              ) : (
+                <span className="offline">
+                  Last seen{" "}
+                  {friendStatus.last_seen
+                    ? formatLastSeen(friendStatus.last_seen)
+                    : "a long time ago"}
+                </span>
+              )}
+            </div>
+          </>
+        ) : (
+          "Select a friend to start chatting"
+        )}
+      </div>
+
 
         <div className="message-container">
           {messages.length === 0 ? (
