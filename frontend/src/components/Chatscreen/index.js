@@ -10,6 +10,7 @@ export default function Chatscreen() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loadingUser, setLoadingUser] = useState(true);
   const [error, setError] = useState(null);
+  const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [friendStatus, setFriendStatus] = useState({
     online: false,
     last_seen: null,
@@ -120,19 +121,30 @@ export default function Chatscreen() {
     console.log(`🔌 WebSocket connected to ${friendId}`);
   };
 
+  
   socket.onmessage = (event) => {
-    console.log("📥 Raw WebSocket message:", event.data);
-    try {
-      const message = JSON.parse(event.data);
-      if (message.Content && message.SenderName) {
-        setMessages((prev) => [...prev, { text: message.Content, from: message.SenderName }]);
-        return;
-      }
-    } catch {
-      // Not JSON, treat as plain string
-      setMessages((prev) => [...prev, { text: event.data, from: selectedFriend?.name || "Unknown" }]);
+  console.log("📥 Raw WebSocket message:", event.data);
+
+  let message;
+  try {
+    message = JSON.parse(event.data);
+  } catch {
+    // Ignore non-JSON completely
+    return;
+  }
+
+  // ✅ ONLY render chat messages
+  if (message.type === "message" && message.content) {
+    setMessages((prev) => [...prev, { text: message.content, from: selectedFriend?.name || "Unknown" }]);
     }
-  };
+    
+    if (message.type === "typing" ) {
+    console.log("typing received frontend")
+    setIsFriendTyping(message.isTyping)
+  }
+
+  // ❌ Ignore typing / other events
+};
 
   socket.onerror = (err) => {
     console.error("WebSocket error:", err);
@@ -249,12 +261,51 @@ export default function Chatscreen() {
     setMessageText("");
 
     try {
-      ws.current.send(text);
+      ws.current.send(JSON.stringify({
+      type: "message",
+      content:  text ,
+      }));
+      
     } catch (e) {
       console.error("❌ Error sending WebSocket message:", e);
       setError("Failed to send message over WebSocket");
     }
   };
+
+  const sendTyping = (isTyping) => {
+    if (!selectedFriend || !userId || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+
+    try {
+       ws.current.send(JSON.stringify({
+      type: "typing",
+         isTyping: isTyping,
+      
+       }));
+    } catch (e) {
+      console.error("❌ Error sending typing message:", e);
+      setError("Failed to send typing status over WebSocket");
+    }
+  }
+
+  let typingtimeout = null;
+  let isTyping = false;
+
+  const handleTyping = (e) => {
+
+    setMessageText(e.target.value)
+
+    if (!isTyping) {
+      isTyping = true
+      sendTyping(isTyping)
+    }
+
+    clearTimeout(typingtimeout)
+      typingtimeout = setTimeout(() => {
+      isTyping = false;
+      sendTyping(false);  // 👈 USER STOPPED TYPING
+    }, 1000);
+    
+  }
 
   const sendFriendRequest = async () => {
     const email = (friendEmail || "").trim();
@@ -460,7 +511,8 @@ export default function Chatscreen() {
         ) : (
           "Select a friend to start chatting"
         )}
-      </div>
+        </div>
+       
 
 
         <div className="message-container">
@@ -474,6 +526,13 @@ export default function Chatscreen() {
             ))
           )}
         </div>
+         {/* Typing indicator UI //isFriendTyping */}
+         
+        {isFriendTyping && (
+            <div className="typing-indicator">
+              ✍️ typing...
+            </div>
+          )}
 
         <div className="input-section">
           <input
@@ -481,7 +540,7 @@ export default function Chatscreen() {
             type="text"
             placeholder="Type a message..."
             value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
+            onChange={(e) => handleTyping(e)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             disabled={!selectedFriend}
           />
